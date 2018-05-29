@@ -7,9 +7,6 @@
 #include <functional>
 #include <type_traits>
 
-// 13增：slice切片、输出运算格式化。
-// 14日新增：矩阵运算、col函数
-
 namespace mystd::matrix::impl {
 	template<typename T>
 	void debugPrint(T t)

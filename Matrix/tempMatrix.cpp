@@ -6,10 +6,6 @@
 #include <functional>
 #include <type_traits>
 
-// 13增：slice切片、输出运算格式化。
-// 14日新增：矩阵运算、col函数, 内存占用优化
-// 不知道啥时候新增：Slice切片元素间距
-
 namespace mystd::matrix::impl {
 template<typename T>
 using InitList = std::initializer_list<T>;

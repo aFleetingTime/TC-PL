@@ -7,10 +7,6 @@
 #include <functional>
 #include <type_traits>
 
-// 13增：slice切片、输出运算格式化。
-// 14日新增：矩阵运算、col函数, 内存占用优化
-// 不知道啥时候新增：Slice切片元素间距
-
 namespace mystd::matrix::impl {
 template<typename T>
 using InitList = std::initializer_list<T>;
@@ -24,8 +20,17 @@ void formStrides(const std::array<std::size_t, Dime> &extents, std::size_t size,
 	if (std::any_of(extents.cbegin(), extents.cend(), [](std::size_t v) { return v == 0; }))
 		throw ExtentsError("extents cannot be zero");
 	for (std::size_t extent : extents)
-		*dest++ = extent ? size /= extent : 0;
+		*dest++ = size /= extent;
 }
+#if 0
+template<std::size_t Dime, typename OutputIt, typename InputIt>
+void formStrides(const std::array<std::size_t, Dime> &extents, std::size_t size, InputIt strs, OutputIt dest) {
+	if (std::any_of(extents.cbegin(), extents.cend(), [](std::size_t v) { return v == 0; }))
+		throw ExtentsError("extents cannot be zero");
+	for (std::size_t extent : extents)
+		*dest++ = (size /= extent) * (*strs++);
+}
+#endif
 
 template<typename T>
 void debugPrint(T t)
@@ -125,6 +130,8 @@ using MatrixInitList = typename impl::MatrixInitList<Type, Dime>::init_list_type
 template<typename T>
 constexpr bool IsReferenceWrp = impl::IsReferenceWrp<T>::value;
 
+struct stride_flag_t { } stride;
+
 class Slice;
 template<typename Type, std::size_t Dime>
 class Matrix;
@@ -154,19 +161,25 @@ struct IsMatrixIter<ConstMatrixIterator<T, D>> : std::true_type { };
 // Slice切片访问
 struct Slice
 {
-	static inline constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
+	static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
+
+	static std::size_t setDefaultPos(std::size_t pos = 1) { return std::exchange(defaultPos, pos); }
+
 	constexpr explicit Slice(std::size_t s = 0, std::size_t len = npos, std::size_t stri = 1) : start(s), length(len), stride(stri) { }
 
 	constexpr std::size_t operator()(std::size_t n) const noexcept { return stride * n + start; }
 
-	static constexpr Slice createSlice(std::size_t start) {
-		return Slice(start, 1);
+	static Slice createSlice(std::size_t start) {
+		return Slice(start, defaultPos);
 	}
 	static constexpr const Slice& createSlice(const Slice &slice) {
 		return slice;
 	}
 
 	std::size_t start, length, stride;
+
+private:
+	static inline std::size_t defaultPos = 1;
 };
 
 // MatrixInitList解析器
@@ -283,15 +296,20 @@ public:
 	MatrixSlice(std::size_t s, const array &exts, const array &strs)
 		: extents(exts), strides(strs), size(initSize()), start(s) { }
 
-	MatrixSlice(const array &stas, const array &exts, const MatrixSlice &other) :
-		start(other.start)
+	MatrixSlice(const array &stas, const array &exts, const MatrixSlice &other) : start(other.start)
 	{
-		initExtsStrs(stas, exts, other.extents, other.strides);
+		initExts(stas, exts, other.extents, other.strides);
 		size = initSize();
-		impl::formStrides(extents, size, strides.begin());
 		strides = other.strides;
 		if (checkArgs(stas, extents, other.extents))
 			throw std::out_of_range("MatrixSlice stas exts: out of range");
+	}
+	MatrixSlice(const array &stas, const array &exts, const array &strs, const MatrixSlice &other) : start(other.start)
+	{
+		initExts(stas, exts, other.extents, other.strides);
+		size = initSize();
+		for (std::size_t i = 0; i < Dime; ++i)
+			strides[i] = other.strides[i] * strs[i];
 	}
 
 	template<typename... Exts, typename = std::enable_if_t<IsAllIntegral<Exts...>>>
@@ -332,7 +350,7 @@ private:
 		return std::accumulate(extents.cbegin(), extents.cend(), std::size_t(1), std::multiplies<std::size_t>());
 	}
 
-	void initExtsStrs(const array &stas, const array &exts, const array &oldExts, const array &oldStrs)
+	void initExts(const array &stas, const array &exts, const array &oldExts, const array &oldStrs)
 	{
 		for (std::size_t i = 0; i < Dime; ++i)
 		{
@@ -836,16 +854,29 @@ public:
 	}
 
 	template<typename... Slices>
-	std::enable_if_t<!IsAllIntegral<Slices...> && IsAllSlice<Slices...>, MatrixRef<Type, Dime>> operator()(const Slices&... slices) {
+	std::enable_if_t<!IsAllIntegral<Slices...> && IsAllSlice<Slices...>, MatrixRef<Type, Dime>> operator()(Slices&&... slices) {
 		static_assert(sizeof...(Slices) == Dime);
 		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... },
 								   { Slice::createSlice(slices).length... }, slice), elems };
 	}
 	template<typename... Slices>
-	std::enable_if_t<!IsAllIntegral<Slices...> && IsAllSlice<Slices...>, ConstMatrixRef<Type, Dime>> operator()(const Slices&... slices) const {
+	std::enable_if_t<!IsAllIntegral<Slices...> && IsAllSlice<Slices...>, ConstMatrixRef<Type, Dime>> operator()(Slices&&... slices) const {
 		static_assert(sizeof...(Slices) == Dime);
 		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... },
 								   { Slice::createSlice(slices).length... }, slice), elems };
+	}
+
+	template<typename... Slices>
+	std::enable_if_t<IsAllSlice<Slices...>, MatrixRef<Type, Dime>> operator()(stride_flag_t flag, Slices&&... slices) {
+		static_assert(sizeof...(Slices) == Dime);
+		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... }, { Slice::createSlice(slices).length... },
+								   { Slice::createSlice(slices).stride... }, slice), elems };
+	}
+	template<typename... Slices>
+	std::enable_if_t<IsAllSlice<Slices...>, ConstMatrixRef<Type, Dime>> operator()(stride_flag_t flag, Slices&&... slices) const {
+		static_assert(sizeof...(Slices) == Dime);
+		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... }, { Slice::createSlice(slices).length... },
+								   { Slice::createSlice(slices).stride... }, slice), elems };
 	}
 
 private:
@@ -991,6 +1022,19 @@ public:
 								   { Slice::createSlice(slices).length... }, slice), elems };
 	}
 
+	template<typename... Slices>
+	std::enable_if_t<IsAllSlice<Slices...>, MatrixRef<Type, Dime>> operator()(stride_flag_t flag, Slices&&... slices) {
+		static_assert(sizeof...(Slices) == Dime);
+		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... }, { Slice::createSlice(slices).length... },
+								   { Slice::createSlice(slices).stride... }, slice), elems };
+	}
+	template<typename... Slices>
+	std::enable_if_t<IsAllSlice<Slices...>, ConstMatrixRef<Type, Dime>> operator()(stride_flag_t flag, Slices&&... slices) const {
+		static_assert(sizeof...(Slices) == Dime);
+		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... }, { Slice::createSlice(slices).length... },
+								   { Slice::createSlice(slices).stride... }, slice), elems };
+	}
+
 private:
 	const MatrixSlice<Dime> slice;
 	Type *const elems;
@@ -1078,6 +1122,13 @@ public:
 		static_assert(sizeof...(Slices) == Dime);
 		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... },
 								   { Slice::createSlice(slices).length... }, slice), elems };
+	}
+
+	template<typename... Slices>
+	std::enable_if_t<IsAllSlice<Slices...>, ConstMatrixRef<Type, Dime>> operator()(stride_flag_t flag, Slices&&... slices) const {
+		static_assert(sizeof...(Slices) == Dime);
+		return { MatrixSlice<Dime>({ Slice::createSlice(slices).start... }, { Slice::createSlice(slices).length... },
+								   { Slice::createSlice(slices).stride... }, slice), elems };
 	}
 
 private:
@@ -1200,7 +1251,7 @@ using namespace mystd::matrix;
 
 int main()
 {
-	Matrix<double, 4> m {
+	const Matrix m ({
 		{
 			{
 				{1, 2, 3},
@@ -1226,6 +1277,8 @@ int main()
 				{34, 35, 36}
 			}
 		}
-	};
-	std::cout << m << std::endl;
+	});
+	Slice::setDefaultPos(Slice::npos);
+	std::cout << m(stride, 0,0,0,0)(stride, 0,0,0,Slice(0, 2, 2)) << std::endl;
+	std::cout << m(stride, 0,0,0,Slice(0,3,2)) << std::endl;
 }
