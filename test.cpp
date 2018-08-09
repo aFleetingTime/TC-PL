@@ -1,4 +1,6 @@
 #include <string>
+#include <fstream>
+#include <array>
 #include <thread>
 #include <complex>
 #include <iomanip>
@@ -636,8 +638,40 @@ struct Cl { static constexpr auto value = V; static constexpr auto value2 = V2; 
 void Cppfunc() { std::cout << "ASF" << std::endl; }
 extern "C" void Cfunc() { Cppfunc(); }
 
+template<typename T, std::size_t N, T V, T... Args>
+constexpr std::initializer_list<T> init_fill()
+{
+	static_assert(N > 0);
+	if constexpr (N == 1)
+		return std::initializer_list<T>{ V, Args... };
+	else return init_fill<T, N - 1, V, Args..., V>();
+	//return N == 1 ? std::initializer_list<T>{ V, Args... } : init_fill<T, N - 1, V, Args..., V>();
+}
+template<typename T, T V>
+void ttttt() { std::cout << V << std::endl; }
+
 int main()
 {
+	std::ifstream f("test.txt");
+	std::stringstream ss;
+	f.seekg(0, std::ios::beg);
+	while (f)
+	{
+		f.tellg();
+		std::string s;
+		std::getline(f, s);
+		std::cout << s << std::endl;
+		ss << s;
+		int i;
+		ss >> i;
+		ss.str("");
+	}
+#if 0
+	constexpr auto v = init_fill<int, 10, 530>();
+	ttttt<int, 10>();
+	for (auto i : v)
+		std::cout << i << ' ';
+	std::cout << std::endl;
 	Cfunc();
 	int restrict;
 	std::wcout << "ABCEFG" u"DEFLLL" << std::endl;
@@ -664,7 +698,6 @@ int main()
 		std::cout << v;
 		std::cout << (num++ % 3 == 0 ? '\n' : ' ');
 	}
-#if 0
 	std::complex<float> d { 1.33333333333333333333333333333333333333333333333333333333333333333333 };
 	std::cout << d << std::endl;
 	std::locale::global(std::locale(""));
@@ -756,8 +789,6 @@ int main()
 	std::bitset<64> bs1;
 	decltype(auto) d = 10;
 	std::vector<bool> vec(10000);
-#endif
-#if 0
 	vec[0] = 1;
 	std::cout << *vec.begin() << std::endl;
 	std::cout << *(vec.begin() + 1) << std::endl;
@@ -798,8 +829,6 @@ int main()
 	std::char_traits<char>::compare("A", "B", 2);
 	std::cout << p.get() << std::endl;
 	std::cout << s << std::endl;
-#endif
-#if 0
 	std::string line;
 	std::getline(std::cin, line);
 	int *p = nullptr;

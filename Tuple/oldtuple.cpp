@@ -70,6 +70,9 @@ namespace mystd {
 	template<typename T>
 	constexpr bool is_bottom_const_v = is_bottom_const<T>::value;
 
+	template<typename... Types>
+	struct Tuple;
+
 	template<typename First, typename... Types>
 	struct TupleBase : TupleBase<Types...>
 	{
@@ -82,6 +85,10 @@ namespace mystd {
 		constexpr TupleBase(const TupleBase<Args...> &rhs) : Base(rhs.baseObject()), value(rhs.value) { }
 		template<typename... Args>
 		constexpr TupleBase(TupleBase<Args...> &&rhs) : Base(std::move(rhs.baseObject())), value(std::move(rhs.value)) { }
+
+		friend class Tuple<First, Types...>;
+		template<typename F, typename... T>
+		friend class TupleBase;
 
 		template<typename... Args>
 		TupleBase& operator=(TupleBase<Args...> &rhs)
@@ -101,10 +108,19 @@ namespace mystd {
 		TupleBase& operator=(TupleBase<Args...> &&rhs)
 		{
 			Base::operator=(std::move(rhs.baseObject()));
-			value = std::move(std::move(rhs.value));
+			value = std::move(rhs.value);
 			return *this;
 		}
 
+		Base tail() { return *this; };
+		const Base tail() const { return *this; };
+
+		template<std::size_t N>
+		constexpr const select_t<N, First, Types...>& get() const {
+			return baseValue<N, select_t<N, First, Types...>>();
+		}
+
+	protected:
 		template<std::size_t N, typename T>
 		constexpr T& baseValue()
 		{
@@ -121,10 +137,10 @@ namespace mystd {
 		}
 
 		constexpr Base& baseObject() {
-			return static_cast<Base&>(*this);
+			return *this;
 		}
 		constexpr const Base& baseObject() const {
-			return static_cast<const Base&>(*this);
+			return *this;
 		}
 	};
 	template<typename Last>
@@ -144,6 +160,10 @@ namespace mystd {
 		template<typename... Args>
 		constexpr TupleBase(TupleBase<Args...> &&rhs) : value(std::move(rhs.value)) { }
 
+		friend class Tuple<Last>;
+		template<typename F, typename... T>
+		friend class TupleBase;
+
 		template<typename... Args>
 		TupleBase& operator=(TupleBase<Args...> &rhs)
 		{
@@ -159,10 +179,16 @@ namespace mystd {
 		template<typename... Args>
 		TupleBase& operator=(TupleBase<Args...> &&rhs)
 		{
-			value = std::move(std::move(rhs.value));
+			value = std::move(rhs.value);
 			return *this;
 		}
 
+		template<std::size_t N>
+		constexpr const Last& get() const {
+			return value;
+		}
+
+	protected:
 		template<std::size_t N, typename T>
 		constexpr T& baseValue() {
 			return value;
@@ -201,34 +227,32 @@ namespace mystd {
 		Tuple& operator=(Tuple<Args...> &&rhs) { Base::template operator=(std::move(rhs.baseObject())); return *this; }
 
 		template<std::size_t N>
-		constexpr auto get() const -> const select_t<N, Types...>&
-		{
+		constexpr const select_t<N, Types...>& get() const {
 			return baseValue<N>();
 		}
 
 		template<std::size_t N>
-		constexpr std::enable_if_t<(N < Tuple::size)> set(const std::remove_reference_t<select_t<N, Types...>> &val)
-		{
+		constexpr std::enable_if_t<(N < Tuple::size)> set(const std::remove_reference_t<select_t<N, Types...>> &val) {
 			baseValue<N>() = val;
 		}
 		template<std::size_t N>
-		constexpr std::enable_if_t<(N < Tuple::size)> set(std::remove_reference_t<select_t<N, Types...>> &&val)
-		{
+		constexpr std::enable_if_t<(N < Tuple::size)> set(std::remove_reference_t<select_t<N, Types...>> &&val) {
 			baseValue<N>() = std::move(val);
 		}
+
+		Base tail() { return *this; };
+		const Base tail() const { return *this; };
 
 	private:
 		Base& baseObject() { return static_cast<Base&>(*this); };
 		const Base& baseObject() const { return static_cast<const Base&>(*this); };
 
 		template<std::size_t N>
-		constexpr auto baseValue() -> select_t<N, Types...>&
-		{
+		constexpr select_t<N, Types...>& baseValue() {
 			return Base::template baseValue<N, select_t<N, Types...>>();
 		}
 		template<std::size_t N>
-		constexpr auto baseValue() const -> const select_t<N, Types...>&
-		{
+		constexpr  const select_t<N, Types...>& baseValue() const {
 			return Base::template baseValue<N, select_t<N, Types...>>();
 		}
 	};
@@ -275,6 +299,19 @@ namespace mystd {
 	{
 		return Tuple{ std::forward<Args>(args)... };
 	}
+
+	//template<typename First, typename... Tail>
+	//Tuple<Tail&...> tail(Tuple<First, Tail...> tup)
+	//{
+	//	constexpr std::size_t diff = sizeof(tup) - sizeof(Tuple<Tail...>);
+	//	return *reinterpret_cast<Tuple<Tail...>*>(reinterpret_cast<char*>(&tup) + diff);
+	//}
+	template<typename First, typename... Tail>
+	Tuple<Tail&...> tail(Tuple<First, Tail...> tup)
+	{
+		constexpr std::size_t diff = sizeof(tup) - sizeof(Tuple<Tail...>);
+		return *reinterpret_cast<Tuple<Tail...>*>(reinterpret_cast<char*>(&tup) + diff);
+	}
 }
 
 template<typename T>
@@ -285,23 +322,39 @@ mystd::enable_if_t<!std::is_integral_v<T>, bool> test() { return false; }
 #endif
 
 template<typename... Args>
-void func(mystd::Tuple<Args...> tup) { }
+void func(mystd::Tuple<Args...> tup)
+{
+	std::cout << tup << std::endl;
+}
+
+template<typename A, typename B, typename C>
+class TypeC
+{
+public:
+	A a;
+	B b;
+	C c;
+	TypeC() = default;
+	template<typename TA, typename TB, typename TC>
+	TypeC(const TypeC<TA, TB, TC> &rhs) : a(rhs.a), b(rhs.b), c(rhs.c) { }
+};
 
 int main()
 {
 	func(mystd::makeTuple(10, 20));
-	//tp = std::move(tp);
 	mystd::Tuple tp(1.2, 10, 'a', 10, "AAA");
-	mystd::Tuple<double, int, char, int, const char *> aa(tp);
 	tp.set<4>("GGGG");
-	mystd::Tuple<double&, const int&, const char&, long, const char*> cc(aa);
-	mystd::Tuple bb(aa);
-	cc.set<0>(143.134);
-	bb.set<0>(1000);
-	bb.set<3>(500);
+	//mystd::Tuple<double&, const int&, const char&, long, const char*> aa(tp);
+	//mystd::Tuple bb(aa);
+	//bb.set<0>(1000.777);
+	//mystd::Tuple<double&, int&, char&, long, const char*> cc(aa);
 	mystd::Tuple<> ttt;
 	std::cout << tp << std::endl;
-	std::cout << aa << std::endl;
-	std::cout << bb << std::endl;
-	std::cout << cc << std::endl;
+	//std::cout << aa << std::endl;
+	//std::cout << bb << std::endl;
+	//mystd::Tuple<int, char, int, char*> b = tp.tail();
+	auto t(tp.tail().tail());
+	std::cout << t.get<0>() << std::endl;
+	std::cout << tp.get<0>() << std::endl;
+	//std::cout << b << std::endl;
 }

@@ -1,4 +1,5 @@
 #include <array>
+#include <cassert>
 #include <string>
 #include <vector>
 #include <numeric>
@@ -919,7 +920,7 @@ public:
 		return *this;
 	}
 	template<typename T>
-	Matrix& operator=(const Matrix<std::reference_wrapper<T>, Dime> &rhs)
+	Matrix& operator=(const Matrix<T, Dime> &rhs)
 	{
 		if (rhs.size() > size())
 			throw InsufficientCapacity("insufficient Capacity");
@@ -1245,6 +1246,47 @@ template<typename T>
 std::enable_if_t<IsMatrixIter<T>::value, bool> operator<(const T &lhs, const T &rhs) {
 	return lhs.get() < rhs.get();
 }
+
+template<typename Type>
+Matrix<typename Matrix<Type, 2>::value_type, 2> operator+(const Matrix<Type, 2> &rhs, const Matrix<Type, 2> &lhs)
+{
+	Matrix<typename Matrix<Type, 2>::value_type, 2> ret(rhs);
+	auto dest = ret.begin();
+	for (auto &v : lhs)
+	{
+		*dest = *dest + v;
+		++dest;
+	}
+	return std::move(ret);
+}
+
+template<typename Type>
+Matrix<typename Matrix<Type, 2>::value_type, 2> operator*(const Matrix<Type, 2> &rhs, const Matrix<Type, 2> &lhs)
+{
+	assert(rhs.rows() == rhs.cols() && rhs.rows() == lhs.rows() && rhs.cols() == rhs.cols());
+	if (rhs.rows() == 1)
+		return Matrix<typename Matrix<Type, 2>::value_type, 2>({{rhs[0][0] * lhs[0][0]}});
+	std::size_t mid = rhs.rows() / 2;
+	Matrix<typename Matrix<Type, 2>::value_type, 2> ret(rhs.rows(), rhs.rows());
+
+	auto a11 = rhs(Slice(0, mid), Slice(0, mid));
+	auto a12 = rhs(Slice(0, mid), Slice(mid));
+	auto a21 = rhs(Slice(mid), Slice(0, mid));
+	auto a22 = rhs(Slice(mid), Slice(mid));
+
+	auto b11 = lhs(Slice(0, mid), Slice(0, mid));
+	auto b12 = lhs(Slice(0, mid), Slice(mid));
+	auto b21 = lhs(Slice(mid), Slice(0, mid));
+	auto b22 = lhs(Slice(mid), Slice(mid));
+
+	ret(Slice(0, mid), Slice(0, mid)) = a11 * b11 + a12 * b21;
+	ret(Slice(0, mid), Slice(mid)) = a11 * b12 + a12 * b22;
+	ret(Slice(mid), Slice(0, mid)) = a21 * b11 + a22 * b21;
+	ret(Slice(mid), Slice(mid)) = a21 * b12 + a22 * b22;
+
+	return std::move(ret);
+}
+
 }
 
 using namespace mystd::matrix;
@@ -1278,7 +1320,17 @@ int main()
 			}
 		}
 	});
-	Slice::setDefaultPos(Slice::npos);
-	std::cout << m(stride, 0,0,0,0)(stride, 0,0,0,Slice(0, 2, 2)) << std::endl;
-	std::cout << m(stride, 0,0,0,Slice(0,3,2)) << std::endl;
+	Matrix a ({
+		{ 1, 3, 9 ,4},
+		{ 7, 5, 9 ,6},
+		{ 7, 5, 9 ,6},
+		{ 7, 5, 9 ,6}
+	});
+	Matrix b ({
+		{ 6, 8, 3 ,5},
+		{ 4, 2, 4 ,4},
+		{ 4, 2, 4 ,3},
+		{ 4, 2, 4 ,9}
+	});
+	std::cout << (a * b) << std::endl;
 }
