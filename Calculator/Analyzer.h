@@ -47,6 +47,9 @@ public:
 	bool addVariable(const std::pair<std::string, T> &p) noexcept {
 		return table.insert(p).second;
 	}
+	const std::map<std::string, T>& variables() const noexcept {
+		return table;
+	}
 	bool owns = false;
 private:
 	result_type prim(bool getflag);

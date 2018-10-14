@@ -35,7 +35,6 @@ int main(int argc, char *argv[])
 		for(int i = 0; argv[++i]; ss << argv[i]);
 		tcin.setInput(ss);
 		auto tmp = calculate(analy);
-		//if(analy.errcno == Analyzer<long double>::Errnos::no_error)
 		if(tmp)
 			std::cout << tmp.value() << '\n';
 		return static_cast<int>(analy.errcno);
@@ -44,16 +43,27 @@ int main(int argc, char *argv[])
 	while(tcin)
 	{
 		if(!analy.owns)
-			std::cout << "\ninput >>> ";
+		{
+			std::cout << "\ninput <<< ";
+			if(std::cin.get() == '#')
+			{
+				for(const auto &variable : analy.variables())
+					std::cout << variable.first << " = " << variable.second << '\n';
+				if(std::cin.get() != '\n')
+				{
+					std::cout.put('\n');
+					std::cin.unget();
+				}
+				else continue;
+			}
+			else std::cin.unget();
+		}
 		auto tmp = calculate(analy);
 		if(tmp)
 			std::cout << std::setw(10) << ' ' << tmp.value() << '\n';
 		else analy.reset();
 		if(std::cin.rdstate() == std::ios::failbit)
-		{
 			std::cin.clear(std::cin.rdstate() ^ std::ios::failbit);
-			tcin.clear();
-		}
 	}
 	std::cout.put('\n');
 	return 0;
