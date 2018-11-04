@@ -1,6 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cassert>
+#include "Format/Format.hpp"
 
 void print(std::size_t n)
 {
@@ -18,7 +19,7 @@ void print(std::size_t n)
 #endif
 	for(std::size_t i = n / 2, s = i + 1; n; --n)
 	{
-		if(i) std::cout << std::setw(i) << std::setfill(' ') << ' ';
+		if (i) std::cout << std::setw(i) << std::setfill(' ') << ' ';
 		std::cout << std::setw(2 * (s - i - 1) + 1) << std::setfill('*') << '*' << std::endl;
 		n > s ? --i : ++i;
 	}
@@ -26,5 +27,5 @@ void print(std::size_t n)
 
 int main()
 {
-	print(40);
+	print(41);
 }
