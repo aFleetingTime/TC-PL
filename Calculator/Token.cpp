@@ -104,6 +104,8 @@ std::istream& operator>>(std::istream &istrm, Token &token)
 			long double num;
 			istrm.unget() >> num;
 			token = num;
+			if(std::isalpha(istrm.peek()))
+				throw ReadTokenError("变量名不能以数字开头");
 		}
 		else if(std::isalpha(tmp))
 		{
@@ -113,7 +115,7 @@ std::istream& operator>>(std::istream &istrm, Token &token)
 			istrm.unget();
 		}
 		else
-			throw ReadTokenError("表达式非法");
+			throw ReadTokenError("表达式无效");
 	}
 	return istrm;
 }

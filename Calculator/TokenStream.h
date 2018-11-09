@@ -25,8 +25,8 @@ public:
 	void setInput(std::istream &istrm) noexcept;
 
 	void clear() noexcept {
-		streamp->clear();
 		streamp->unget();
+		streamp->clear();
 		while(*streamp && streamp->get() != '\n');
 	}
 	void close() noexcept {

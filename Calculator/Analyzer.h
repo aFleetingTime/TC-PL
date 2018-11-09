@@ -13,9 +13,9 @@ public:
 	using result_type = std::optional<T>;
 	enum class Errnos : short {
 		no_error, divide_by_zero, missing_right_parenthesis, primary_expected, 
-		lack_of_operational_objects, end_of_transmission, empty_expression, invalid_expression
+		lack_of_operational_objects, end_of_transmission, empty_expression, invalid_expression,
+		variable_length_is_out_of_range
 	};
-	static Errnos errcno;
 	explicit Analyzer(TokenStream &ts) : tcin(ts) { }
 	result_type calculate() {
 		try {
@@ -23,7 +23,7 @@ public:
 			if(k == Kind::print)
 				return calculate();
 			else if(k == Kind::end)
-				return errorInfo("空表达式", Errnos::empty_expression);
+				return errorInfo("表达式为空", Errnos::empty_expression);
 			else if(!tcin)
 			{
 				errcno = Errnos::end_of_transmission;
@@ -32,7 +32,8 @@ public:
 			else
 			{
 				auto tmp = expr(false);
-				if(!tmp && errcno != Errnos::primary_expected) tcin.clear();
+				if(!tmp && errcno != Errnos::primary_expected)
+					tcin.clear();
 				return tmp;
 			}
 		} catch(const ReadTokenError &e) {
@@ -41,8 +42,11 @@ public:
 			throw;
 		}
 	}
-	static void reset(Errnos eno = Errnos::no_error) noexcept {
+	void reset(Errnos eno = Errnos::no_error) noexcept {
 		errcno = eno;
+	}
+	Errnos errnos() const noexcept {
+		return errcno;
 	}
 	bool addVariable(const std::pair<std::string, T> &p) noexcept {
 		return table.insert(p).second;
@@ -52,16 +56,14 @@ public:
 	}
 	bool owns = false;
 private:
+	Errnos errcno;
 	result_type prim(bool getflag);
 	result_type term(bool getflag);
 	result_type expr(bool getflag);
 	TokenStream &tcin;
 	std::map<std::string, T> table;
-	static result_type errorInfo(const std::string &info, Errnos eno);
+	result_type errorInfo(const std::string &info, Errnos eno);
 };
-
-template<typename T>
-typename Analyzer<T>::Errnos Analyzer<T>::errcno = Errnos::no_error;
 
 template<typename T>
 typename Analyzer<T>::result_type Analyzer<T>::errorInfo(const std::string &info, Errnos eno)
@@ -87,10 +89,13 @@ typename Analyzer<T>::result_type Analyzer<T>::prim(bool getflag)
 	}
 	case Kind::name:
 	{
-		T &d = table[tcin.current().getNameValue()];
+		// New
+		auto name = tcin.current().getNameValue();
+		if(name.size() > 8)
+			return errorInfo("变量名过长(不超过8字符)", Errnos::variable_length_is_out_of_range);
 		if(tcin.get().getKind() == Kind::assign)
-			d = expr(true).value_or(0);
-		return d;
+			return table[name] = expr(true).value_or(0);
+		return table[name];
 	}
 	case Kind::minus:
 		return -(prim(true).value_or(0));
@@ -107,7 +112,7 @@ typename Analyzer<T>::result_type Analyzer<T>::prim(bool getflag)
 		return d;
 	}
 	case Kind::rp:
-		return errorInfo("')'括号不匹配", Errnos::missing_right_parenthesis);
+		return errorInfo(flag ? "括号内容为空" : "')'括号不匹配", Errnos::missing_right_parenthesis);
 	case Kind::plus:
 	case Kind::mul:
 	case Kind::div:

@@ -1,5 +1,6 @@
 #include <iomanip>
 #include <sstream>
+#include <boost/format.hpp>
 #include "Analyzer.h"
 
 TokenStream tcin{std::cin};
@@ -37,9 +38,9 @@ int main(int argc, char *argv[])
 		auto tmp = calculate(analy);
 		if(tmp)
 			std::cout << tmp.value() << '\n';
-		return static_cast<int>(analy.errcno);
+		return static_cast<int>(analy.errnos());
 	}
-	std::cout << "计算器v1.0" << std::endl;
+	std::cout << "计算器\n'#'查看已定义变量" << std::endl;
 	while(tcin)
 	{
 		if(!analy.owns)
@@ -48,7 +49,7 @@ int main(int argc, char *argv[])
 			if(std::cin.get() == '#')
 			{
 				for(const auto &variable : analy.variables())
-					std::cout << variable.first << " = " << variable.second << '\n';
+					std::cout << boost::format("%|-8| = %|_16.8|") % variable.first % variable.second << std::endl;
 				if(std::cin.get() != '\n')
 				{
 					std::cout.put('\n');
@@ -62,8 +63,8 @@ int main(int argc, char *argv[])
 		if(tmp)
 			std::cout << std::setw(10) << ' ' << tmp.value() << '\n';
 		else analy.reset();
-		if(std::cin.rdstate() == std::ios::failbit)
-			std::cin.clear(std::cin.rdstate() ^ std::ios::failbit);
+		//if(std::cin.rdstate() == std::ios::failbit)
+		//	std::cin.clear(std::cin.rdstate() ^ std::ios::failbit);
 	}
 	std::cout.put('\n');
 	return 0;
